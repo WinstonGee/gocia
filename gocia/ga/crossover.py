@@ -308,3 +308,166 @@ def crossover_snsSurf_2d_GC_poly(surf1, surf2, tolerance=0.5, bondRejList=None):
         print('\nOffspring is created at attempt #%i\t|Tolerance = %.3f'%\
             (n_trial, tolerance))
     return childSurf
+
+def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, chemList=None):
+    # Get relevant positions from mother and father surfaces
+    matFixBufPos, patFixBufPos = surf1.get_fixBufPos(), surf2.get_fixBufPos() # positions of fixed and buffer atoms, or equivalently, substrate atoms with get_subPos()
+    matBridPos, patBridPos = surf1.get_bridPos(), surf2.get_bridPos() # positions of bridle atoms
+    matAds, patAds = surf1.get_adsAtoms(), surf2.get_adsAtoms() # adsorbate atoms
+
+    # Look until we find a viable child structure
+    isBADSTRUCTURE = True
+    n_trial = 0
+    goodPos, badPos = [], []
+    while isBADSTRUCTURE:
+        n_trial += 1
+
+        # Find center of mass and generate a random direction to define line for splitting
+        center, direction = split_2d(matAds, patAds)
+
+        ### Start with fixed and buffer atoms
+        # Make list of distances between the position of every mother/father atom in the x,y-plane and the splitting line
+        matDist = [dist2lin(center, center+direction, i) for i in matFixBufPos[:, :2]]
+        patDist = [dist2lin(center, center+direction, i) for i in patFixBufPos[:, :2]]
+
+        # Sort all mother/father atoms into good and bad
+        # REQUIRES SAME NUMBER OF FIXED AND BUFFER ATOMS IN MOTHER AND FATHER
+        for i in range(len(matFixBufPos)): 
+            tmpGood, tmpBad = [], []
+            if matDist[i] <= 0:     
+                tmpGood.append(matFixBufPos[i])
+            else:                  
+                tmpBad.append(matFixBufPos[i])
+            if patDist[i] > 0:    
+                tmpGood.append(patFixBufPos[i])
+            else:
+                tmpBad.append(patFixBufPos[i])
+            goodPos.append(tmpGood)
+            badPos.append(tmpBad)
+
+        # Make child by taking proper atoms
+        childPos = []
+        childSurf = surf1.copy()
+        for i in range(len(matFixBufPos)):
+            if len(goodPos[i]) == 1:
+                childPos.append(goodPos[i][0])
+            elif len(goodPos[i]) == 0:
+                # Then there must be 2 in bad position list
+                # We keep the one closer to splitline
+                tmpDist = [dist2lin(center, center+direction, p[:2])\
+                        for p in badPos[i]]
+                childPos.append(badPos[i][tmpDist.index(min(tmpDist))])
+            elif len(goodPos[i]) == 2:
+                # We keep the one closer to splitline
+                tmpDist = [dist2lin(center, center+direction, p[:2])\
+                        for p in goodPos[i]]
+                childPos.append(goodPos[i][tmpDist.index(min(tmpDist))])
+        childSurf.set_fixBufPos(childPos)
+
+        ### Then work on adsorbate fragment atoms
+        # Take distance from bridle atom of each fragment to splitting line
+        matDist = [dist2lin(center, center+direction, i) for i in matBridPos[:, :2]]
+        patDist = [dist2lin(center, center+direction, i) for i in patBridPos[:, :2]]
+
+        # !!! Similar strategy in permuteMut(): slide index, separately select and sort, fuse together, slide back
+        # Get mother/father fragment lists and transpose indices down to only adsorbate atoms
+        matFragList = frag.transposeDown(surf1.get_fragList(), surf1)
+        patFragList = frag.transposeDown(surf2.get_fragList(), surf2)
+
+        # print('matFragList: ', matFragList, [matAds[f].get_chemical_formula() for f in matFragList])
+        # print('patFragList: ', patFragList, [patAds[f].get_chemical_formula() for f in patFragList])
+
+        # Select proper fragments from mother/father
+        newMatFragList, newPatFragList = [], []
+        newMatFragAtms, newPatFragAtms = Atoms(), Atoms()
+        for i in range(len(matDist)):
+            if matDist[i] <= 0:
+                matFrag = matFragList[i]
+                newMatFragList.append(matFrag)
+                newMatFragAtms.extend(matAds[matFrag])
+        for i in range(len(patDist)):
+            if patDist[i] > 0:
+                patFrag = patFragList[i]
+                newPatFragList.append(patFrag)
+                newPatFragAtms.extend(patAds[patFrag])
+
+        # Condense and sort each
+        if len(newMatFragAtms) > 0:
+            newMatFragList = frag.remake(newMatFragList,frag.flatsort(newMatFragList),range(len(newMatFragAtms))) 
+            newMatFragAtms = sort(newMatFragAtms)
+            #print([newMatFragAtms[f].get_chemical_formula() for f in newMatFragList])
+        if len(newPatFragAtms) > 0:
+            newPatFragList = frag.remake(newPatFragList,frag.flatsort(newPatFragList),range(len(newPatFragAtms))) 
+            newPatFragAtms = sort(newPatFragAtms) 
+            #print([newPatFragAtms[f].get_chemical_formula() for f in newPatFragList])
+
+        # Fuse together
+        newStructure = newMatFragList + newPatFragList
+        newContents = frag.flatten(newMatFragList) + [len(frag.flatten(newMatFragList)) + i for f in newPatFragList for i in f]
+        newFragList = frag.refill(newStructure,newContents)
+        newFragAtms = newMatFragAtms + newPatFragAtms
+        #print([newFragAtms[f].get_chemical_formula() for f in newFragList])
+
+        # Transpose indices up to all interface atoms and set fragment atoms
+        kid_fragList = frag.transposeUp(newFragList, childSurf)
+        childSurf.set_fragList(kid_fragList)
+        newFragAtms.info['adsorbate_fragments'] = frag.transposeUp(newFragList, childSurf)
+        childSurf.set_adsAtoms_frag(newFragAtms)
+        childSurf.wrap()
+
+        # Make sure maintains the same number of adsorbate fragments as the parents
+        # (Follows same logic as leachMut_frag)
+        try:
+            assert len(surf1.get_fragList()) == len(surf2.get_fragList())
+        except: 
+            print('Whoops somehow parents have different number of adsorbate fragments in canonical ensemble')
+        while len(childSurf.get_fragList()) > len(surf1.get_fragList()):
+            print(' |- Leaching extra adsorbate:', end = '\t')
+            myDel = np.random.choice(list(range(len(childSurf.get_fragList()))),size=1)[0]
+            if childSurf.get_fragNames()[myDel] in chemList:
+                print(childSurf.get_fragNames()[myDel])
+                childSurf.remove_adsFrag(childSurf.get_fragList()[myDel])
+        # (Follows same logic as growMut_frag)
+        while len(childSurf.get_fragList()) < len(surf1.get_fragList()):
+            print(' |- Growing extra adsorbate:', end = '\t')
+            from gocia.geom.build import grow_frag
+            tmpInterfc = childSurf.copy()
+            myFrag = np.random.choice(chemList, size=1)[0]
+            print(myFrag, end='\t')
+            tmpInterfc = grow_frag(
+                tmpInterfc,
+                [myFrag],
+                zLim = childSurf.zLim,
+                bondRejList=bondRejList
+            )
+            childSurf.set_allAtoms(tmpInterfc.get_allAtoms())
+
+        # Evaluate quality of kid structure
+        isBADSTRUCTURE = childSurf.has_badContact(tolerance=tolerance)
+
+        # check bonds
+        if not isBADSTRUCTURE:
+            if bondRejList is not None:
+                mySymb = childSurf.get_chemical_symbols()
+                bps = geom.get_bondpairs(childSurf.get_allAtoms(), min(1-tolerance/2, 1-tolerance+0.2))
+                #myBPs = [[mySymb[bp[0]], mySymb[bp[1]]] for bp in myBPs]
+                bps = [[mySymb[bp[0]], mySymb[bp[1]]] for bp in bps]
+                for br in bondRejList:
+                    if br in bps or [br[1],br[0]] in bps:
+                        #print('Rejected bond exists: ', br)
+                        isBADSTRUCTURE = True
+                        break
+        #         if isBADSTRUCTURE:
+        #             print('b', end='')
+        # else:
+        #     print(f'c', end='')
+
+        if n_trial > int(200/tolerance):
+            isBADSTRUCTURE = False
+            childSurf = None
+            print(f' FAIL ', end='')
+            break
+    if childSurf is not None:
+        print('\nOffspring is created at attempt #%i\t|Tolerance = %.3f'%\
+            (n_trial, tolerance))
+    return childSurf
