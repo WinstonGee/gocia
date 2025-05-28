@@ -415,6 +415,14 @@ def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, che
         childSurf.set_adsAtoms_frag(newFragAtms)
         childSurf.wrap()
 
+        for f in childSurf.get_fragList():
+            formula = childSurf.get_allAtoms()[f].get_chemical_formula()
+            if formula not in chemList:
+                print(' |- Leaching unwanted adsorbate:', end = '\t')
+                print(formula)
+                childSurf.remove_adsFrag(f)
+                # Next section should take care of adding back proper adsorbates but could do so here too
+
         # Make sure maintains the same number of adsorbate fragments as the parents
         # (Follows same logic as leachMut_frag)
         try:
