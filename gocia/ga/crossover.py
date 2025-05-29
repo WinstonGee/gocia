@@ -456,6 +456,7 @@ def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, che
                     zLim = childSurf.zLim,
                     bondRejList=bondRejList
                 )
+                print('Does grow_frag work?')
                 childSurf.set_allAtoms(tmpInterfc.get_allAtoms())
             print('After growing: ')
             childSurf.print()
