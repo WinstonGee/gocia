@@ -5,6 +5,7 @@ from ase.atoms import Atoms
 from gocia.interface import Interface
 from gocia import frag
 from gocia import geom
+from gocia.geom.build import grow_frag
 from ase.build.tools import sort
 
 def dist2lin(p1, p2, p3):
@@ -309,7 +310,7 @@ def crossover_snsSurf_2d_GC_poly(surf1, surf2, tolerance=0.5, bondRejList=None):
             (n_trial, tolerance))
     return childSurf
 
-def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, chemList=None):
+def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, chemNumDict=None):
     # Get relevant positions from mother and father surfaces
     matFixBufPos, patFixBufPos = surf1.get_fixBufPos(), surf2.get_fixBufPos() # positions of fixed and buffer atoms, or equivalently, substrate atoms with get_subPos()
     matBridPos, patBridPos = surf1.get_bridPos(), surf2.get_bridPos() # positions of bridle atoms
@@ -415,40 +416,49 @@ def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, che
         childSurf.set_adsAtoms_frag(newFragAtms)
         childSurf.wrap()
 
+        # Remove unwanted adsorbates
+        print('Checking for unwanted adsorbates . . .')
         for f in childSurf.get_fragList():
             formula = childSurf.get_allAtoms()[f].get_chemical_formula()
-            if formula not in chemList:
+            try:
+                assert formula == [l for l in chemNumDict][0]
+            except:
+                print('nope not the same adsorbate')
+            if formula not in [l for l in chemNumDict]:
                 print(' |- Leaching unwanted adsorbate:', end = '\t')
                 print(formula)
                 childSurf.remove_adsFrag(f)
                 # Next section should take care of adding back proper adsorbates but could do so here too
 
         # Make sure maintains the same number of adsorbate fragments as the parents
-        # (Follows same logic as leachMut_frag)
         try:
             assert len(surf1.get_fragList()) == len(surf2.get_fragList())
         except: 
             print('Whoops somehow parents have different number of adsorbate fragments in canonical ensemble')
-        while len(childSurf.get_fragList()) > len(surf1.get_fragList()):
-            print(' |- Leaching extra adsorbate:', end = '\t')
-            myDel = np.random.choice(list(range(len(childSurf.get_fragList()))),size=1)[0]
-            if childSurf.get_fragNames()[myDel] in chemList:
-                print(childSurf.get_fragNames()[myDel])
-                childSurf.remove_adsFrag(childSurf.get_fragList()[myDel])
-        # (Follows same logic as growMut_frag)
-        while len(childSurf.get_fragList()) < len(surf1.get_fragList()):
-            print(' |- Growing extra adsorbate:', end = '\t')
-            from gocia.geom.build import grow_frag
-            tmpInterfc = childSurf.copy()
-            myFrag = np.random.choice(chemList, size=1)[0]
-            print(myFrag, end='\t')
-            tmpInterfc = grow_frag(
-                tmpInterfc,
-                [myFrag],
-                zLim = childSurf.zLim,
-                bondRejList=bondRejList
-            )
-            childSurf.set_allAtoms(tmpInterfc.get_allAtoms())
+        print('Testing keeping adsorbate number constant: ')
+        childSurf.print()
+        for chem in chemNumDict:
+            while len([n for n in childSurf.get_fragNames() if chem in n]) > int(chemNumDict[chem]):
+                myDel = np.random.choice(list(range(len(childSurf.get_fragList()))),size=1)[0]
+                if childSurf.get_fragNames()[myDel] in chem:
+                    print(' |- Leaching extra adsorbate:', end = '\t')
+                    print(childSurf.get_fragNames()[myDel])
+                    childSurf.remove_adsFrag(childSurf.get_fragList()[myDel])
+            print('After leaching: ')
+            childSurf.print()
+            while len([n for n in childSurf.get_fragNames() if chem in n]) < int(chemNumDict[chem]):
+                print(' |- Growing extra adsorbate:', end = '\t')
+                tmpInterfc = childSurf.copy()
+                print(chem, end='\t')
+                tmpInterfc = grow_frag(
+                    tmpInterfc,
+                    [chem],
+                    zLim = childSurf.zLim,
+                    bondRejList=bondRejList
+                )
+                childSurf.set_allAtoms(tmpInterfc.get_allAtoms())
+            print('After growing: ')
+            childSurf.print()
 
         # Evaluate quality of kid structure
         isBADSTRUCTURE = childSurf.has_badContact(tolerance=tolerance)

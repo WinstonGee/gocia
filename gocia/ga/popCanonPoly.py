@@ -21,7 +21,7 @@ class PopulationCanonicalPoly:
         gadb=None,
         popSize=20,
         zLim=None,
-        chemList=None,
+        chemNumDict=None,
         compParam=None,
         matingMethod=None,
         convergeCrit=None,
@@ -49,8 +49,8 @@ class PopulationCanonicalPoly:
         else:
             self.convergeCrit = convergeCrit
 
-        if chemList is not None:
-            self.chemList = chemList
+        if chemNumDict is not None:
+            self.chemNumDict = chemNumDict
 
         self.iniSize = len(self)
 
@@ -258,7 +258,7 @@ class PopulationCanonicalPoly:
                 kid.transMut(transVec=transVec)
             if mutType == 3 and moveOn:
                 myMutate = 'move'
-                kid.moveMut_frag(self.chemList)
+                kid.moveMut_frag([l for l in self.chemNumDict])
         open('label', 'w').write('%i %i %s' % (mater, pater, myMutate))
         self.gadb.update(mater, mated=self.gadb.get(id=mater).mated+1)
         self.gadb.update(pater, mated=self.gadb.get(id=pater).mated+1)
@@ -278,7 +278,7 @@ class PopulationCanonicalPoly:
             patInfo = self.convertFragStrToInfo(patFragStr)
             surf1 = Interface(matAtms, self.substrate, zLim=self.zLim, info=matInfo) 
             surf2 = Interface(patAtms, self.substrate, zLim=self.zLim, info=patInfo)
-            kid = crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=bondRejList, chemList=self.chemList)
+            kid = crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=bondRejList, chemNumDict=self.chemNumDict)
             parent = random.choice([surf1, surf2]).copy()
             print('PARENTS: %i and %i' % (mater, pater))
         print(matInfo['adsorbate_fragments'], [matAtms[l].get_chemical_formula() for l in matInfo['adsorbate_fragments']])
@@ -305,7 +305,7 @@ class PopulationCanonicalPoly:
                 kid.rattleMut_buffer()
             if mutType == 'move':
                 #kid.moveMut_frag([l for l in self.chemPotDict])
-                myFrag = np.random.choice(self.chemList, size=1)[0]
+                myFrag = np.random.choice([l for l in self.chemNumDict], size=1)[0]
                 kid.leachMut_frag([myFrag])
                 # the grow step needs info of the constraints
                 # otherwise very prone to dead loop!
@@ -317,7 +317,7 @@ class PopulationCanonicalPoly:
                     # # growMut_box_frag() is messed up -- needs fixing
                     # tmpKid.growMut_box_frag([l for l in self.chemPotDict], xyzLims=xyzLims,
                     #             bondRejList=bondRejList, constrainTop=constrainTop)
-                    tmpKid.growMut_frag(self.chemList, bondRejList=bondRejList)
+                    tmpKid.growMut_frag([l for l in self.chemNumDict], bondRejList=bondRejList)
                 kid = tmpKid.copy()
             if mutType == 'permute':
                 kid.permuteMut_frag()
