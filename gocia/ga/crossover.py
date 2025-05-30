@@ -448,16 +448,18 @@ def crossover_snsSurf_2d_poly(surf1, surf2, tolerance=0.5, bondRejList=None, che
             childSurf.print()
             while len([n for n in childSurf.get_fragNames() if chem in n]) < int(chemNumDict[chem]):
                 print(' |- Growing extra adsorbate:', end = '\t')
-                tmpInterfc = childSurf.copy()
+                #tmpInterfc = childSurf.copy()
                 print(chem, end='\t')
-                tmpInterfc = grow_frag(
-                    tmpInterfc,
+                childSurf = grow_frag(
+                    childSurf,
                     [chem],
                     zLim = childSurf.zLim,
                     bondRejList=bondRejList
                 )
                 print('Does grow_frag work?')
-                childSurf.set_allAtoms(tmpInterfc.get_allAtoms())
+                #tmpInterfc.print()
+                #childSurf.set_allAtoms(tmpInterfc.get_allAtoms())
+                #kid = tmpKid.copy()
             print('After growing: ')
             childSurf.print()
 
