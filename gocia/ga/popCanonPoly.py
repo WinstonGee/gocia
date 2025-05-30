@@ -428,7 +428,10 @@ class PopulationCanonicalPoly:
         atoms.info['adsFrag']=myFragList
         myInfo = self.convertFragListToInfo(myFragList)
         myFragList = str(myFragList)
-        
+
+        # Only upload to database if matches the number of adsorbates
+        if len(myFragList) < sum(self.chemNumDict.values()):
+            return
 
         ene_eV = atoms.get_potential_energy()
         try:
